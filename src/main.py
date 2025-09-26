@@ -36,6 +36,7 @@ def create_app():
          origins=[
              "http://localhost:5173",
              "http://localhost:3000",
+             "https://nexus-communicator.netlify.app",
              "https://*.netlify.app",
              "https://*.vercel.app",
              os.environ.get('FRONTEND_URL', '')
