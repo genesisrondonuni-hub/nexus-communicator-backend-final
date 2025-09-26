@@ -1,3 +1,4 @@
+import google.generativeai as genai
 from flask import Blueprint, request, jsonify, session
 from src.models.user import db, User, BotActivity
 from datetime import datetime, timedelta
@@ -258,28 +259,53 @@ def test_auto_response():
         
         test_message = data['test_message']
         
-        # TODO: Implementar integración real con Gemini API
-        # Por ahora, generar una respuesta de ejemplo
-        sample_response = f"""Hola, gracias por tu mensaje: "{test_message}"
+        try:
+            # 1. Configurar la API de Gemini
+            genai.configure(api_key=user.gemini_api_key)
+            
+            # 2. Crear el prompt
+            prompt = f"""
+            Eres un asistente virtual para un negocio. Usa la siguiente base de conocimiento para responder al mensaje del usuario.
+            Sé amable, profesional y directo.
 
-Basándome en la información de nuestro negocio, puedo ayudarte con:
-- Información sobre nuestros productos y servicios
-- Horarios de atención
-- Preguntas frecuentes
-- Soporte técnico
+            **Base de Conocimiento:**
+            ---
+            {user.gemini_knowledge_base}
+            ---
 
-¿En qué más puedo asistirte?
+            **Mensaje del Usuario:**
+            ---
+            {test_message}
+            ---
 
----
-Esta es una respuesta generada automáticamente por nuestro asistente IA."""
-        
-        # Registrar actividad de prueba
+            **Respuesta:**
+            """
+            
+            # 3. Llamar a la API de Gemini
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content(prompt)
+            generated_response = response.text
+            
+        except Exception as api_error:
+            # Registrar el error de la API
+            activity = BotActivity(
+                user_id=user.id,
+                activity_type='test_response',
+                message_content=test_message,
+                response_content=f"Error de API: {str(api_error)}",
+                status='failed'
+            )
+            db.session.add(activity)
+            db.session.commit()
+            return jsonify({'error': f'Error al contactar la API de Gemini: {str(api_error)}'}), 500
+
+        # Registrar actividad de prueba exitosa
         activity = BotActivity(
             user_id=user.id,
             activity_type='test_response',
             contact_name='Usuario de Prueba',
             message_content=test_message,
-            response_content=sample_response,
+            response_content=generated_response,
             status='success'
         )
         db.session.add(activity)
@@ -287,9 +313,7 @@ Esta es una respuesta generada automáticamente por nuestro asistente IA."""
         
         return jsonify({
             'test_message': test_message,
-            'generated_response': sample_response,
-            'response_time': '1.2s',
-            'confidence': 0.95
+            'generated_response': generated_response
         }), 200
         
     except Exception as e:
